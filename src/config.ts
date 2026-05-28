@@ -16,4 +16,11 @@ export const config = {
     // 各业务工作流的 ID。
     workflowWordGetAudio: required('COZE_WORKFLOW_WORD_GET_AUDIO'),
   },
+  db: {
+    host: required('DB_HOST'),
+    port: Number(process.env.DB_PORT ?? 3306),
+    user: required('DB_USER'),
+    password: required('DB_PASSWORD'),
+    database: required('DB_NAME'),
+  },
 };

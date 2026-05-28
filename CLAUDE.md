@@ -65,3 +65,26 @@ HTTP/1.1 401 Unauthorized
 `Content-Type: audio/mpeg`），**仅在出错时返回 JSON 信封**。
 例：`GET /api/word/getAudio?word=apple` 成功返回 mp3 字节，失败返回
 `{ code: 500, message, data: null }`。
+
+## 数据库规范（所有表必须遵守）
+
+每张表都**必须**包含以下三个公共字段：
+
+| 字段 | 定义 | 说明 |
+|------|------|------|
+| `id` | `BIGINT PRIMARY KEY AUTO_INCREMENT` | 自增主键 |
+| `created_at` | `TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP` | 创建时间，插入时自动写入 |
+| `updated_at` | `TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` | 更新时间，每次行被修改时自动刷新 |
+
+建表示例：
+
+```sql
+CREATE TABLE IF NOT EXISTS word_audio (
+  id         BIGINT       PRIMARY KEY AUTO_INCREMENT,
+  word       VARCHAR(128) NOT NULL UNIQUE,
+  audio      LONGBLOB     NOT NULL,
+  mime       VARCHAR(64)  NOT NULL DEFAULT 'audio/mpeg',
+  created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
