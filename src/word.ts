@@ -13,10 +13,51 @@ interface AudioRow extends RowDataPacket {
   mime: string;
 }
 
+interface LookupRow extends RowDataPacket {
+  result: unknown; // JSON 列，mysql2 会自动解析为对象
+}
+
+interface AliasRow extends RowDataPacket {
+  word: string;
+}
+
 // 把音频字节流回给客户端（媒体接口不套信封）。
 function sendAudio(res: Response, audio: Buffer, mime: string): void {
   res.set('Content-Type', mime);
   res.send(audio);
+}
+
+// 调用查词工作流，返回 result 对象（无结果则 null）。工作流输入参数名为 raw。
+async function runLookup(input: string): Promise<Record<string, unknown> | null> {
+  const run = await cozeClient.workflows.runs.create({
+    workflow_id: config.coze.workflowWordLookup,
+    parameters: { raw: input },
+  });
+  return JSON.parse(run.data)?.result ?? null;
+}
+
+// 按规范词读 word_lookup 缓存，命中返回 result 对象，否则 null。
+async function findLookup(word: string): Promise<unknown | null> {
+  const [rows] = await pool.query<LookupRow[]>(
+    'SELECT result FROM word_lookup WHERE word = ?',
+    [word],
+  );
+  return rows.length > 0 ? rows[0].result : null;
+}
+
+// 回填缓存：规范词结果写 word_lookup；输入与规范词不同时写 word_alias 映射。
+// 两表均用 upsert，已存在则忽略（去重 + 防并发冲突）。
+async function saveLookup(raw: string, word: string, result: unknown): Promise<void> {
+  await pool.query(
+    'INSERT INTO word_lookup (word, result) VALUES (?, ?) ON DUPLICATE KEY UPDATE id = id',
+    [word, JSON.stringify(result)],
+  );
+  if (word && word !== raw) {
+    await pool.query(
+      'INSERT INTO word_alias (raw, word) VALUES (?, ?) ON DUPLICATE KEY UPDATE id = id',
+      [raw, word],
+    );
+  }
 }
 
 // GET /api/word/getAudio?word=apple
@@ -69,24 +110,48 @@ wordRouter.get('/getAudio', async (req, res) => {
 });
 
 // GET /api/word/lookup?word=apple
-// 查词：调用工作流返回单词的音标、词性、释义等结构化信息（暂不缓存）。
+// 两级读穿透缓存：word_alias（输入词 → 规范词）+ word_lookup（规范词 → 结果）。
 wordRouter.get('/lookup', async (req, res) => {
-  const word = typeof req.query.word === 'string' ? req.query.word.trim() : '';
-  if (!word) {
+  const input = typeof req.query.word === 'string' ? req.query.word.trim() : '';
+  if (!input) {
     return badRequest(res, 'word is required');
   }
+  const raw = input.toLowerCase();
 
   try {
-    // 工作流的输入参数名为 raw（对外仍统一用 word）。
-    const run = await cozeClient.workflows.runs.create({
-      workflow_id: config.coze.workflowWordLookup,
-      parameters: { raw: word },
-    });
+    // 1. 查 word_alias[raw]。
+    const [aliases] = await pool.query<AliasRow[]>(
+      'SELECT word FROM word_alias WHERE raw = ?',
+      [raw],
+    );
+    if (aliases.length > 0) {
+      const word = aliases[0].word;
+      const cached = await findLookup(word);
+      if (cached) {
+        return success(res, cached); // alias + lookup 双命中
+      }
+      // 数据异常：alias 存在但 lookup 缺失，用规范词补一次工作流。
+      const result = await runLookup(word);
+      if (!result) {
+        return fail(res, 'workflow did not return a lookup result');
+      }
+      await saveLookup(raw, word, result);
+      return success(res, result);
+    }
 
-    const result = JSON.parse(run.data)?.result;
+    // 2. alias 未命中，再直接查 word_lookup[raw]（raw 可能本身就是规范词）。
+    const direct = await findLookup(raw);
+    if (direct) {
+      return success(res, direct);
+    }
+
+    // 3. 都没有：拿 raw 调工作流，回填缓存。
+    const result = await runLookup(raw);
     if (!result) {
       return fail(res, 'workflow did not return a lookup result');
     }
+    const word = String(result.word ?? '').trim().toLowerCase() || raw;
+    await saveLookup(raw, word, result);
     success(res, result);
   } catch (err) {
     fail(res, err);
