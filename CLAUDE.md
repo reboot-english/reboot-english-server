@@ -6,9 +6,10 @@
 
 - 统一前缀 `/api`，路径形如 `/api/{模块}/{动作}`
 - 模块名用**单数名词**（`word`、`user`），动作用 **camelCase 动词**
-- 常用动词词表（统一使用，勿自创同义词）：
-  - `get`（取单条）、`list`（列表）、`create`、`update`、`delete`
-  - 特殊动作自定义，如 `getAudio`、`login`
+- 动词以**贴合实际场景**为准，下面是**推荐优先使用**的词表（能对上语义就复用，避免随意造同义词，但不强制）：
+  - `get`（取本系统的单条记录）、`list`（列表）、`create`、`update`、`delete`
+  - `lookup`（向外部 / 参照数据源查询，区别于 `get` 取本系统记录，如 `word/lookup`）
+  - 词表覆盖不了时，按场景自定义清晰的动词，如 `getAudio`、`login`
 - **方法只用两种**：
   - `GET`：读取/查询（无副作用），参数走 **查询字符串**（`?word=apple`）
   - `POST`：其它一切（增/删/改/触发动作），参数走 **JSON 请求体**
@@ -16,7 +17,7 @@
 示例：
 ```
 GET  /api/word/getAudio?word=apple
-GET  /api/word/get?word=apple
+GET  /api/word/lookup?word=apple
 GET  /api/word/list?page=1&pageSize=20
 POST /api/word/create      body: { ... }
 POST /api/word/update      body: { id, ... }

@@ -15,6 +15,7 @@ export const config = {
     baseURL: process.env.COZE_API_BASE_URL ?? 'https://api.coze.cn',
     // 各业务工作流的 ID。
     workflowWordGetAudio: required('COZE_WORKFLOW_WORD_GET_AUDIO'),
+    workflowWordLookup: required('COZE_WORKFLOW_WORD_LOOKUP'),
   },
   db: {
     host: required('DB_HOST'),

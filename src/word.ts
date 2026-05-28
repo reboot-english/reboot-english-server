@@ -4,7 +4,7 @@ import type { RowDataPacket } from 'mysql2';
 import { cozeClient } from './coze.js';
 import { config } from './config.js';
 import { pool } from './db.js';
-import { badRequest, fail } from './response.js';
+import { badRequest, fail, success } from './response.js';
 
 export const wordRouter = Router();
 
@@ -63,6 +63,31 @@ wordRouter.get('/getAudio', async (req, res) => {
       [word, audio, mime],
     );
     sendAudio(res, audio, mime);
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// GET /api/word/lookup?word=apple
+// 查词：调用工作流返回单词的音标、词性、释义等结构化信息（暂不缓存）。
+wordRouter.get('/lookup', async (req, res) => {
+  const word = typeof req.query.word === 'string' ? req.query.word.trim() : '';
+  if (!word) {
+    return badRequest(res, 'word is required');
+  }
+
+  try {
+    // 工作流的输入参数名为 raw（对外仍统一用 word）。
+    const run = await cozeClient.workflows.runs.create({
+      workflow_id: config.coze.workflowWordLookup,
+      parameters: { raw: word },
+    });
+
+    const result = JSON.parse(run.data)?.result;
+    if (!result) {
+      return fail(res, 'workflow did not return a lookup result');
+    }
+    success(res, result);
   } catch (err) {
     fail(res, err);
   }
