@@ -29,6 +29,11 @@ interface WordRow extends RowDataPacket {
   word: string;
 }
 
+interface AliasListRow extends RowDataPacket {
+  raw: string;
+  word: string;
+}
+
 // 从请求体取 word 并归一化（trim + 小写，与 getAudio 一致）；缺失返回 ''。
 function normalizeBodyWord(body: unknown): string {
   const raw = (body as { word?: unknown })?.word;
@@ -266,6 +271,20 @@ wordRouter.get('/listAudio', async (_req, res) => {
   }
 });
 
+// GET /api/word/listAlias
+// 返回所有别名映射（word_alias），按保存逆序（id DESC，最近在前）。
+// 每条含 raw（别名/输入形式）与 word（规范词）。
+wordRouter.get('/listAlias', async (_req, res) => {
+  try {
+    const [rows] = await pool.query<AliasListRow[]>(
+      'SELECT raw, word FROM word_alias ORDER BY id DESC',
+    );
+    success(res, rows.map((r) => ({ raw: r.raw, word: r.word })));
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
 // POST /api/word/deleteAudio  body: { word }
 // 删除单词发音（word_audio）。直接按传入的 word 精确删除，不做 trim/小写归一化，
 // 以便能精确删除像 /pə/ 这类音标碎片。幂等：无论原来是否存在均返回成功。
@@ -296,6 +315,24 @@ wordRouter.post('/delete', async (req, res) => {
   try {
     await pool.query('DELETE FROM word_lookup WHERE word = ?', [word]);
     success(res, { word, deleted: true });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// POST /api/word/deleteAlias  body: { raw }
+// 按 raw（别名本身，唯一键）删除单条别名映射（word_alias）。
+// raw 做 trim + 小写，与入库时一致。幂等：无论原来是否存在均返回成功。
+wordRouter.post('/deleteAlias', async (req, res) => {
+  const input = (req.body as { raw?: unknown })?.raw;
+  const raw = typeof input === 'string' ? input.trim().toLowerCase() : '';
+  if (!raw) {
+    return badRequest(res, 'raw is required');
+  }
+
+  try {
+    await pool.query('DELETE FROM word_alias WHERE raw = ?', [raw]);
+    success(res, { raw, deleted: true });
   } catch (err) {
     fail(res, err);
   }
