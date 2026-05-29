@@ -252,3 +252,16 @@ wordRouter.get('/list', async (_req, res) => {
     fail(res, err);
   }
 });
+
+// GET /api/word/listAudio
+// 返回所有有发音的单词（word_audio），按保存逆序（id DESC，最近在前）。
+wordRouter.get('/listAudio', async (_req, res) => {
+  try {
+    const [rows] = await pool.query<WordRow[]>(
+      'SELECT word FROM word_audio ORDER BY id DESC',
+    );
+    success(res, rows.map((r) => r.word));
+  } catch (err) {
+    fail(res, err);
+  }
+});
