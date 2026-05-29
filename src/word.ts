@@ -25,6 +25,10 @@ interface FavoriteRow extends RowDataPacket {
   word: string;
 }
 
+interface WordRow extends RowDataPacket {
+  word: string;
+}
+
 // 从请求体取 word 并归一化（trim + 小写，与 getAudio 一致）；缺失返回 ''。
 function normalizeBodyWord(body: unknown): string {
   const raw = (body as { word?: unknown })?.word;
@@ -229,6 +233,19 @@ wordRouter.get('/listFavorite', async (_req, res) => {
   try {
     const [rows] = await pool.query<FavoriteRow[]>(
       'SELECT word FROM word_favorite ORDER BY id DESC',
+    );
+    success(res, rows.map((r) => r.word));
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// GET /api/word/list
+// 返回数据库里所有查过的单词（word_lookup），按保存逆序（id DESC，最近在前）。
+wordRouter.get('/list', async (_req, res) => {
+  try {
+    const [rows] = await pool.query<WordRow[]>(
+      'SELECT word FROM word_lookup ORDER BY id DESC',
     );
     success(res, rows.map((r) => r.word));
   } catch (err) {
