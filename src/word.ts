@@ -221,3 +221,17 @@ wordRouter.get('/isFavorite', async (req, res) => {
     fail(res, err);
   }
 });
+
+// GET /api/word/listFavorite
+// 返回所有收藏的单词，按收藏逆序（最近收藏在前）。
+// 用 id DESC 而非 created_at DESC：id 自增严格单调，避免同秒并列时顺序不稳。
+wordRouter.get('/listFavorite', async (_req, res) => {
+  try {
+    const [rows] = await pool.query<FavoriteRow[]>(
+      'SELECT word FROM word_favorite ORDER BY id DESC',
+    );
+    success(res, rows.map((r) => r.word));
+  } catch (err) {
+    fail(res, err);
+  }
+});
