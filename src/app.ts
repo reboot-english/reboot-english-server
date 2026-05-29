@@ -1,8 +1,16 @@
 import express, { type ErrorRequestHandler } from 'express';
+import { requestLogger } from './logger.js';
 import { badRequest, fail, success } from './response.js';
 import { wordRouter } from './word.js';
 
 export const app = express();
+
+// 关闭 ETag：JSON 接口统一返回信封，不出现空 body 的 304（协商缓存），
+// 保证每个响应都带完整信封且 code 与真实状态码一致。
+app.set('etag', false);
+
+// 访问日志：放在最前，覆盖所有接口并计入完整耗时（含 body 解析）。
+app.use(requestLogger);
 
 app.use(express.json());
 

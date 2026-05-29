@@ -21,6 +21,16 @@ interface AliasRow extends RowDataPacket {
   word: string;
 }
 
+interface FavoriteRow extends RowDataPacket {
+  word: string;
+}
+
+// 从请求体取 word 并归一化（trim + 小写，与 getAudio 一致）；缺失返回 ''。
+function normalizeBodyWord(body: unknown): string {
+  const raw = (body as { word?: unknown })?.word;
+  return typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+}
+
 // 把音频字节流回给客户端（媒体接口不套信封）。
 function sendAudio(res: Response, audio: Buffer, mime: string): void {
   res.set('Content-Type', mime);
@@ -153,6 +163,60 @@ wordRouter.get('/lookup', async (req, res) => {
     const word = String(result.word ?? '').trim().toLowerCase() || raw;
     await saveLookup(raw, word, result);
     success(res, result);
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// POST /api/word/favorite  body: { word }
+// 收藏单词（全局，暂不分用户）。幂等：重复收藏走 upsert，已存在则忽略。
+wordRouter.post('/favorite', async (req, res) => {
+  const word = normalizeBodyWord(req.body);
+  if (!word) {
+    return badRequest(res, 'word is required');
+  }
+
+  try {
+    await pool.query(
+      'INSERT INTO word_favorite (word) VALUES (?) ON DUPLICATE KEY UPDATE id = id',
+      [word],
+    );
+    success(res, { word, favorited: true });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// POST /api/word/unfavorite  body: { word }
+// 取消收藏。幂等：没收藏过也返回成功（删除 0 行同样视为成功）。
+wordRouter.post('/unfavorite', async (req, res) => {
+  const word = normalizeBodyWord(req.body);
+  if (!word) {
+    return badRequest(res, 'word is required');
+  }
+
+  try {
+    await pool.query('DELETE FROM word_favorite WHERE word = ?', [word]);
+    success(res, { word, favorited: false });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// GET /api/word/isFavorite?word=apple
+// 查询单词是否已收藏，供客户端渲染收藏按钮初始态。
+wordRouter.get('/isFavorite', async (req, res) => {
+  const word = typeof req.query.word === 'string' ? req.query.word.trim().toLowerCase() : '';
+  if (!word) {
+    return badRequest(res, 'word is required');
+  }
+
+  try {
+    const [rows] = await pool.query<FavoriteRow[]>(
+      'SELECT word FROM word_favorite WHERE word = ?',
+      [word],
+    );
+    success(res, { word, favorited: rows.length > 0 });
   } catch (err) {
     fail(res, err);
   }
