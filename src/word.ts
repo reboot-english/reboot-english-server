@@ -283,3 +283,20 @@ wordRouter.post('/deleteAudio', async (req, res) => {
     fail(res, err);
   }
 });
+
+// POST /api/word/delete  body: { word }
+// 删除单词的查词结果（word_lookup）。trim + 小写后精确匹配（word_lookup 存规范小写词）。
+// 只删 word_lookup，不动发音/别名/收藏。幂等：无论原来是否存在均返回成功。
+wordRouter.post('/delete', async (req, res) => {
+  const word = normalizeBodyWord(req.body);
+  if (!word) {
+    return badRequest(res, 'word is required');
+  }
+
+  try {
+    await pool.query('DELETE FROM word_lookup WHERE word = ?', [word]);
+    success(res, { word, deleted: true });
+  } catch (err) {
+    fail(res, err);
+  }
+});
