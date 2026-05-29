@@ -265,3 +265,21 @@ wordRouter.get('/listAudio', async (_req, res) => {
     fail(res, err);
   }
 });
+
+// POST /api/word/deleteAudio  body: { word }
+// 删除单词发音（word_audio）。直接按传入的 word 精确删除，不做 trim/小写归一化，
+// 以便能精确删除像 /pə/ 这类音标碎片。幂等：无论原来是否存在均返回成功。
+wordRouter.post('/deleteAudio', async (req, res) => {
+  const raw = (req.body as { word?: unknown })?.word;
+  const word = typeof raw === 'string' ? raw : '';
+  if (!word) {
+    return badRequest(res, 'word is required');
+  }
+
+  try {
+    await pool.query('DELETE FROM word_audio WHERE word = ?', [word]);
+    success(res, { word, deleted: true });
+  } catch (err) {
+    fail(res, err);
+  }
+});
